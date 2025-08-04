@@ -5,51 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hunter's Film Viewer</title>
   <style>
-    body { margin: 0; background: black; color: white; font-family: sans-serif; }
-    video { width: 100vw; height: 100vh; }
+    html, body { margin: 0; padding: 0; background: black; color: white; height: 100%; overflow: hidden; cursor: none; }
+    #player { width: 100vw; height: 100vh; outline: none; }
     #speed-indicator {
       position: absolute;
       top: 10px;
       right: 20px;
       font-size: 18px;
       display: none;
+      z-index: 100;
     }
     #overlay {
       position: absolute;
-      top: 20px;
-      left: 20px;
-      z-index: 10;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      cursor: auto;
     }
-    #queue-input {
-      width: 80vw;
-      height: 150px;
-    }
-    #start-btn, #generate-link {
-      font-size: 18px;
-      padding: 10px;
-      margin-top: 10px;
-      margin-right: 10px;
-    }
-    #share-link {
-      word-wrap: break-word;
-      max-width: 80vw;
-      margin-top: 10px;
-    }
+    #queue-input { width: 80vw; height: 20vh; font-size: 16px; }
+    button { font-size: 18px; padding: 10px 20px; margin: 10px; }
+    a { color: #4FC3F7; word-wrap: break-word; }
   </style>
 </head>
 <body>
   <div id="overlay">
-    <textarea id="queue-input" placeholder="Paste .m3u8 links, one per line..."></textarea><br>
-    <button id="start-btn">Start Queue</button>
-    <button id="generate-link">Generate Shareable Link</button>
+    <textarea id="queue-input" placeholder="Paste .m3u8 links, one per line..."></textarea>
+    <div>
+      <button id="start-btn">Start Queue</button>
+      <button id="generate-link">Generate Shareable Link</button>
+    </div>
     <div id="share-link"></div>
   </div>
   <div id="speed-indicator">1.0x</div>
-  <video id="player" controls></video>
+  <video id="player" tabindex="0"></video>
 
   <script>
     const player = document.getElementById('player');
     const speedIndicator = document.getElementById('speed-indicator');
+    const overlay = document.getElementById('overlay');
     const queueInput = document.getElementById('queue-input');
     const startBtn = document.getElementById('start-btn');
     const generateBtn = document.getElementById('generate-link');
@@ -60,99 +58,83 @@
     let playbackSpeed = 1.0;
     let holdTimeout;
 
-    // If a ?q= parameter is present, decode and auto-start
-    const urlParams = new URLSearchParams(window.location.search);
-    const queueEncoded = urlParams.get('q');
-    if (queueEncoded) {
-      try {
-        const decoded = atob(queueEncoded);
-        videoQueue = decoded.trim().split('\n').filter(Boolean);
-        document.getElementById('overlay').style.display = 'none';
-        loadVideo(0);
-      } catch (e) {
-        console.error('Invalid queue data');
-      }
-    }
-
-    startBtn.onclick = () => {
-      videoQueue = queueInput.value.trim().split('\n').filter(Boolean);
-      if (videoQueue.length > 0) {
-        document.getElementById('overlay').style.display = 'none';
-        loadVideo(0);
-      }
-    };
-
-    generateBtn.onclick = () => {
-      const rawQueue = queueInput.value.trim();
-      if (!rawQueue) return;
-      const encoded = btoa(rawQueue);
-      const shareURL = `${window.location.origin}${window.location.pathname}?q=${encoded}`;
-      shareLink.innerHTML = `<strong>Share this link on your TV:</strong><br><a href="${shareURL}" target="_blank">${shareURL}</a>`;
-    };
-
     function loadVideo(index) {
       currentIndex = index;
       player.src = videoQueue[index];
       player.playbackRate = playbackSpeed;
       player.play();
+      player.focus();
     }
 
-    player.addEventListener('ended', () => {
-      if (currentIndex < videoQueue.length - 1) {
-        loadVideo(currentIndex + 1);
+    // Handle queue from URL
+    const params = new URLSearchParams(window.location.search);
+    const encoded = params.get('q');
+    if (encoded) {
+      try {
+        const decoded = atob(encoded);
+        videoQueue = decoded.trim().split('\n').filter(Boolean);
+        overlay.style.display = 'none';
+        loadVideo(0);
+      } catch(e) { console.error('Invalid queue code'); }
+    }
+
+    startBtn.onclick = () => {
+      videoQueue = queueInput.value.trim().split('\n').filter(Boolean);
+      if (videoQueue.length) {
+        overlay.style.display = 'none';
+        loadVideo(0);
       }
+    };
+
+    generateBtn.onclick = () => {
+      const raw = queueInput.value.trim();
+      if (!raw) return;
+      const code = btoa(raw);
+      const url = `${location.origin}${location.pathname}?q=${code}`;
+      shareLink.innerHTML = `<strong>Share this URL on your TV:</strong><br><a href="${url}">${url}</a>`;
+    };
+
+    // Video end auto-advance
+    player.addEventListener('ended', () => {
+      if (currentIndex < videoQueue.length - 1) loadVideo(currentIndex + 1);
     });
 
-    document.addEventListener('keydown', (e) => {
+    // Key controls
+    document.addEventListener('keydown', e => {
       if (e.repeat) return;
-
-      switch (e.key) {
-        case 'ArrowRight':
-          player.currentTime += 5;
-          break;
-        case 'ArrowLeft':
-          player.currentTime -= 5;
-          break;
+      switch(e.key) {
+        case 'ArrowRight': player.currentTime += 5; break;
+        case 'ArrowLeft':  player.currentTime -= 5; break;
         case 'ArrowUp':
-          playbackSpeed = Math.min(playbackSpeed + 0.25, 4.0);
-          player.playbackRate = playbackSpeed;
-          updateSpeedIndicator();
+          playbackSpeed = Math.min(playbackSpeed + 0.25, 4);
+          player.playbackRate = playbackSpeed; updateSpeed();
           break;
         case 'ArrowDown':
           playbackSpeed = Math.max(playbackSpeed - 0.25, 0.25);
-          player.playbackRate = playbackSpeed;
-          updateSpeedIndicator();
+          player.playbackRate = playbackSpeed; updateSpeed();
           break;
         case 'Enter':
           holdTimeout = setTimeout(() => {
-            if (currentIndex < videoQueue.length - 1) {
-              loadVideo(currentIndex + 1);
-            }
+            if (currentIndex < videoQueue.length - 1) loadVideo(currentIndex + 1);
           }, 3000);
           break;
-        case ' ': // fallback for spacebar
-          togglePlayPause();
-          break;
+        case ' ': togglePlay(); break;
       }
     });
 
-    document.addEventListener('keyup', (e) => {
+    document.addEventListener('keyup', e => {
       if (e.key === 'Enter') {
         clearTimeout(holdTimeout);
-        togglePlayPause();
+        togglePlay();
       }
     });
 
-    function togglePlayPause() {
-      if (player.paused) {
-        player.play();
-      } else {
-        player.pause();
-      }
+    function togglePlay() {
+      player.paused ? player.play() : player.pause();
     }
 
-    function updateSpeedIndicator() {
-      if (playbackSpeed !== 1.0) {
+    function updateSpeed() {
+      if (playbackSpeed !== 1) {
         speedIndicator.innerText = playbackSpeed.toFixed(2) + 'x';
         speedIndicator.style.display = 'block';
       } else {
