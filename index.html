@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hunter's Film Viewer</title>
+  <style>
+    body { margin: 0; background: black; color: white; font-family: sans-serif; }
+    video { width: 100vw; height: 100vh; }
+    #speed-indicator {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      font-size: 18px;
+      display: none;
+    }
+    #overlay {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+    }
+    #queue-input {
+      width: 80vw;
+      height: 150px;
+    }
+    #start-btn, #generate-link {
+      font-size: 18px;
+      padding: 10px;
+      margin-top: 10px;
+      margin-right: 10px;
+    }
+    #share-link {
+      word-wrap: break-word;
+      max-width: 80vw;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <textarea id="queue-input" placeholder="Paste .m3u8 links, one per line..."></textarea><br>
+    <button id="start-btn">Start Queue</button>
+    <button id="generate-link">Generate Shareable Link</button>
+    <div id="share-link"></div>
+  </div>
+  <div id="speed-indicator">1.0x</div>
+  <video id="player" controls></video>
+
+  <script>
+    const player = document.getElementById('player');
+    const speedIndicator = document.getElementById('speed-indicator');
+    const queueInput = document.getElementById('queue-input');
+    const startBtn = document.getElementById('start-btn');
+    const generateBtn = document.getElementById('generate-link');
+    const shareLink = document.getElementById('share-link');
+
+    let videoQueue = [];
+    let currentIndex = 0;
+    let playbackSpeed = 1.0;
+    let holdTimeout;
+
+    // If a ?q= parameter is present, decode and auto-start
+    const urlParams = new URLSearchParams(window.location.search);
+    const queueEncoded = urlParams.get('q');
+    if (queueEncoded) {
+      try {
+        const decoded = atob(queueEncoded);
+        videoQueue = decoded.trim().split('\n').filter(Boolean);
+        document.getElementById('overlay').style.display = 'none';
+        loadVideo(0);
+      } catch (e) {
+        console.error('Invalid queue data');
+      }
+    }
+
+    startBtn.onclick = () => {
+      videoQueue = queueInput.value.trim().split('\n').filter(Boolean);
+      if (videoQueue.length > 0) {
+        document.getElementById('overlay').style.display = 'none';
+        loadVideo(0);
+      }
+    };
+
+    generateBtn.onclick = () => {
+      const rawQueue = queueInput.value.trim();
+      if (!rawQueue) return;
+      const encoded = btoa(rawQueue);
+      const shareURL = `${window.location.origin}${window.location.pathname}?q=${encoded}`;
+      shareLink.innerHTML = `<strong>Share this link on your TV:</strong><br><a href="${shareURL}" target="_blank">${shareURL}</a>`;
+    };
+
+    function loadVideo(index) {
+      currentIndex = index;
+      player.src = videoQueue[index];
+      player.playbackRate = playbackSpeed;
+      player.play();
+    }
+
+    player.addEventListener('ended', () => {
+      if (currentIndex < videoQueue.length - 1) {
+        loadVideo(currentIndex + 1);
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+
+      switch (e.key) {
+        case 'ArrowRight':
+          player.currentTime += 5;
+          break;
+        case 'ArrowLeft':
+          player.currentTime -= 5;
+          break;
+        case 'ArrowUp':
+          playbackSpeed = Math.min(playbackSpeed + 0.25, 4.0);
+          player.playbackRate = playbackSpeed;
+          updateSpeedIndicator();
+          break;
+        case 'ArrowDown':
+          playbackSpeed = Math.max(playbackSpeed - 0.25, 0.25);
+          player.playbackRate = playbackSpeed;
+          updateSpeedIndicator();
+          break;
+        case 'Enter':
+          holdTimeout = setTimeout(() => {
+            if (currentIndex < videoQueue.length - 1) {
+              loadVideo(currentIndex + 1);
+            }
+          }, 3000);
+          break;
+        case ' ': // fallback for spacebar
+          togglePlayPause();
+          break;
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') {
+        clearTimeout(holdTimeout);
+        togglePlayPause();
+      }
+    });
+
+    function togglePlayPause() {
+      if (player.paused) {
+        player.play();
+      } else {
+        player.pause();
+      }
+    }
+
+    function updateSpeedIndicator() {
+      if (playbackSpeed !== 1.0) {
+        speedIndicator.innerText = playbackSpeed.toFixed(2) + 'x';
+        speedIndicator.style.display = 'block';
+      } else {
+        speedIndicator.style.display = 'none';
+      }
+    }
+  </script>
+</body>
+</html>
