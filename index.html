@@ -8,28 +8,15 @@
     html, body { margin: 0; padding: 0; background: black; color: white; height: 100%; overflow: hidden; cursor: none; }
     #player { width: 100vw; height: 100vh; outline: none; }
     #speed-indicator {
-      position: absolute;
-      top: 10px;
-      right: 20px;
-      font-size: 18px;
-      display: none;
-      z-index: 100;
+      position: absolute; top: 10px; right: 20px; font-size: 18px; display: none; z-index: 100;
     }
     #overlay {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.8);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 200;
-      cursor: auto;
+      position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; cursor: auto;
     }
-    #queue-input { width: 80vw; height: 20vh; font-size: 16px; }
-    button { font-size: 18px; padding: 10px 20px; margin: 10px; }
-    a { color: #4FC3F7; word-wrap: break-word; }
+    #queue-input { width: 80vw; height: 20vh; font-size: 16px; margin-bottom: 10px; }
+    button { font-size: 18px; padding: 10px 20px; margin: 5px; }
+    input#share-url { width: 80vw; font-size: 16px; margin: 5px 0; }
   </style>
 </head>
 <body>
@@ -39,7 +26,10 @@
       <button id="start-btn">Start Queue</button>
       <button id="generate-link">Generate Shareable Link</button>
     </div>
-    <div id="share-link"></div>
+    <div id="share-container" style="display:none;">
+      <input type="text" id="share-url" readonly />
+      <button id="copy-btn">Copy Link</button>
+    </div>
   </div>
   <div id="speed-indicator">1.0x</div>
   <video id="player" tabindex="0"></video>
@@ -51,7 +41,9 @@
     const queueInput = document.getElementById('queue-input');
     const startBtn = document.getElementById('start-btn');
     const generateBtn = document.getElementById('generate-link');
-    const shareLink = document.getElementById('share-link');
+    const shareContainer = document.getElementById('share-container');
+    const shareUrlInput = document.getElementById('share-url');
+    const copyBtn = document.getElementById('copy-btn');
 
     let videoQueue = [];
     let currentIndex = 0;
@@ -66,7 +58,7 @@
       player.focus();
     }
 
-    // Handle queue from URL
+    // Load queue from URL param
     const params = new URLSearchParams(window.location.search);
     const encoded = params.get('q');
     if (encoded) {
@@ -75,9 +67,10 @@
         videoQueue = decoded.trim().split('\n').filter(Boolean);
         overlay.style.display = 'none';
         loadVideo(0);
-      } catch(e) { console.error('Invalid queue code'); }
+      } catch(e) { console.error('Invalid queue code:', e); }
     }
 
+    // Start queue from input
     startBtn.onclick = () => {
       videoQueue = queueInput.value.trim().split('\n').filter(Boolean);
       if (videoQueue.length) {
@@ -86,20 +79,30 @@
       }
     };
 
+    // Generate shareable link
     generateBtn.onclick = () => {
       const raw = queueInput.value.trim();
       if (!raw) return;
       const code = btoa(raw);
       const url = `${location.origin}${location.pathname}?q=${code}`;
-      shareLink.innerHTML = `<strong>Share this URL on your TV:</strong><br><a href="${url}">${url}</a>`;
+      shareUrlInput.value = url;
+      shareContainer.style.display = 'block';
     };
 
-    // Video end auto-advance
+    // Copy link to clipboard
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(shareUrlInput.value).then(() => {
+        copyBtn.innerText = 'Copied!';
+        setTimeout(() => { copyBtn.innerText = 'Copy Link'; }, 1500);
+      });
+    };
+
+    // Auto-advance on end
     player.addEventListener('ended', () => {
       if (currentIndex < videoQueue.length - 1) loadVideo(currentIndex + 1);
     });
 
-    // Key controls
+    // Remote controls
     document.addEventListener('keydown', e => {
       if (e.repeat) return;
       switch(e.key) {
